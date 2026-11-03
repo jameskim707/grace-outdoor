@@ -1,0 +1,64 @@
+<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>중앙 분수광장 · 단독 확인 화면</title>
+<style>
+html,body{margin:0;height:100%;background:#0d1b3a;overflow:hidden;font:13px/1.5 "Noto Sans KR","Malgun Gothic","Apple SD Gothic Neo",sans-serif;color:#243329}
+canvas{display:block;width:100%;height:100%;touch-action:none}
+#panel{position:fixed;left:14px;top:14px;width:250px;background:#f7f4ebe6;border-radius:10px;padding:14px 16px;box-shadow:0 10px 40px #0004;z-index:5}
+#panel b{font-size:14px}#panel small{color:#6f7663}#panel label{display:block;margin-top:9px}
+#panel input[type=range]{width:100%}#panel select,#panel button{font:inherit;padding:5px 8px;margin-top:4px}
+#stats{margin-top:10px;font:12px/1.6 ui-monospace,Consolas,monospace;color:#3f4a3c;white-space:pre}
+#badge{position:fixed;right:14px;top:14px;z-index:20;background:#b3303c;color:#fff;text-decoration:none;border-radius:999px;padding:8px 14px;font-weight:700;box-shadow:0 6px 24px #0005}
+#badge small{display:block;font-weight:400;font-size:10px;opacity:.9}
+#hint{position:fixed;left:50%;bottom:14px;transform:translateX(-50%);background:#0007;color:#fff;border-radius:999px;padding:6px 14px;font-size:12px;z-index:5}
+</style></head><body>
+<canvas id="c"></canvas>
+<div id="panel"><b>중앙 분수광장</b> <small>모듈 단독 확인</small>
+<label>시각 <span id="tl">12:00</span><input id="t" type="range" min="0" max="1" step="0.005" value="0.5"></label>
+<label><input id="play" type="checkbox"> 하루 흐르게 (60초)</label>
+<label>품질 <select id="q"><option value="low">낮음</option><option value="mid" selected>보통</option><option value="high">높음</option></select></label>
+<label><input id="dbg" type="checkbox"> 충돌·점유 영역 보기</label>
+<div id="stats"></div></div>
+<a id="badge" href="tel:109">자살예방 상담전화 109<small>24시간 · 무료 · 항상 이 자리에</small></a>
+<div id="hint">W A S D / 방향키 이동 · 화면 드래그로 둘러보기</div>
+<script type="module">
+import * as THREE from './vendor/three/three.module.js';
+import createPlazaModule,{collides,envFor} from './plaza.module.js';
+const $=s=>document.querySelector(s),qs=new URLSearchParams(location.search);
+const renderer=new THREE.WebGLRenderer({canvas:$('#c'),antialias:true});renderer.setPixelRatio(Math.min(devicePixelRatio||1,1.5));
+const scene=new THREE.Scene(),camera=new THREE.PerspectiveCamera(60,1,.1,200);
+const hemi=new THREE.HemisphereLight(0xffffff,0x888888,1),sun=new THREE.DirectionalLight(0xffffff,1);scene.add(hemi,sun);
+const far=new THREE.Mesh(new THREE.CircleGeometry(220,48),new THREE.MeshLambertMaterial({color:'#6f8f5f'}));far.rotation.x=-Math.PI/2;far.position.y=-.03;scene.add(far);
+const starsG=new THREE.BufferGeometry(),sp=new Float32Array(900);for(let i=0;i<300;i++){const a=Math.random()*6.283,e=.15+Math.random()*1.2,r=150;sp[i*3]=Math.cos(a)*Math.cos(e)*r;sp[i*3+1]=Math.sin(e)*r;sp[i*3+2]=Math.sin(a)*Math.cos(e)*r}
+starsG.setAttribute('position',new THREE.BufferAttribute(sp,3));const starsM=new THREE.PointsMaterial({color:'#fff',size:1.6,sizeAttenuation:false,transparent:true,opacity:0,fog:false});scene.add(new THREE.Points(starsG,starsM));
+const plaza=createPlazaModule();
+const quality=qs.get('q')||'mid';$('#q').value=quality;
+await plaza.init({THREE,scene,quality,t01:+(qs.get('t')??.5)});
+let t01=+(qs.get('t')??.5);function applyTime(){const E=plaza.setTimeOfDay(t01);scene.background=new THREE.Color(E.sky);scene.fog=new THREE.Fog(E.fog,45,110);hemi.color.set(E.hemi.sky);hemi.groundColor.set(E.hemi.ground);hemi.intensity=E.hemi.intensity;sun.color.set(E.sun.color);sun.intensity=E.sun.intensity;sun.position.set(E.sun.dir[0]*60,E.sun.dir[1]*60,E.sun.dir[2]*60);starsM.opacity=Math.max(0,E.night-.4)*1.4;
+  const m=Math.round(t01*1440)%1440;$('#tl').textContent=String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0');$('#t').value=t01}
+applyTime();
+// 보이는 충돌·점유 영역
+const dbg=new THREE.Group();dbg.visible=false;scene.add(dbg);
+const line=(pts,c)=>{const g=new THREE.BufferGeometry().setFromPoints(pts.map(p=>new THREE.Vector3(p[0],.12,p[1])));dbg.add(new THREE.LineLoop(g,new THREE.LineBasicMaterial({color:c})))};
+const ring=(x,z,r,c,n=40)=>line(Array.from({length:n},(_,i)=>[x+Math.cos(i/n*6.283)*r,z+Math.sin(i/n*6.283)*r]),c);
+const shapes=plaza.getColliders();ring(0,0,plaza.footprint.r,0x2fd070,72);
+for(const s of shapes){if(s.type==='circle')ring(s.x,s.z,s.r,0xff3b30);else{const c=Math.cos(s.rot),n=Math.sin(s.rot),hw=s.w/2,hd=s.d/2;line([[-hw,-hd],[hw,-hd],[hw,hd],[-hw,hd]].map(([a,b])=>[s.x+a*c+b*n,s.z-a*n+b*c]),0xff3b30)}}
+for(const[k,a]of Object.entries(plaza.getAnchors())){const m=new THREE.Mesh(new THREE.ConeGeometry(.35,1.2,8),new THREE.MeshBasicMaterial({color:a.kind==='path'?0xffd400:0x00c8ff}));m.position.set(a.x,.8,a.z);dbg.add(m)}
+$('#dbg').onchange=e=>dbg.visible=e.target.checked;if(qs.get('debug')==='1'){$('#dbg').checked=true;dbg.visible=true}
+$('#t').oninput=e=>{t01=+e.target.value;applyTime()};$('#q').onchange=e=>plaza.setQuality(e.target.value);
+// 걷기
+const P={x:+(qs.get('x')??0),z:+(qs.get('z')??-14),yaw:+(qs.get('yaw')??Math.PI),pitch:+(qs.get('pitch')??-.06)},keys={};
+addEventListener('keydown',e=>{if(e.key)keys[e.key.toLowerCase()]=true});addEventListener('keyup',e=>{if(e.key)keys[e.key.toLowerCase()]=false});
+let drag=null;const cv=$('#c');cv.onpointerdown=e=>{drag=[e.clientX,e.clientY];cv.setPointerCapture(e.pointerId)};cv.onpointerup=()=>drag=null;
+cv.onpointermove=e=>{if(!drag)return;P.yaw-=(e.clientX-drag[0])*.004;P.pitch=Math.max(-1,Math.min(.8,P.pitch-(e.clientY-drag[1])*.003));drag=[e.clientX,e.clientY]};
+function resize(){const w=innerWidth,h=innerHeight;renderer.setSize(w,h,false);camera.aspect=w/h;camera.updateProjectionMatrix()}addEventListener('resize',resize);resize();
+let last=performance.now(),acc=0,frames=0,fps=0;
+function frame(now){const dt=Math.min((now-last)/1000,.05);last=now;
+  const f=(keys.w||keys.arrowup?1:0)-(keys.s||keys.arrowdown?1:0),s=(keys.d||keys.arrowright?1:0)-(keys.a||keys.arrowleft?1:0),n=Math.hypot(f,s)||1;
+  const dx=(s*Math.cos(P.yaw)-f*Math.sin(P.yaw))*dt*3/n,dz=(-f*Math.cos(P.yaw)-s*Math.sin(P.yaw))*dt*3/n,sh=plaza.getColliders();
+  if(!collides(sh,P.x+dx,P.z,.3)&&Math.hypot(P.x+dx,P.z)<17.5)P.x+=dx;if(!collides(sh,P.x,P.z+dz,.3)&&Math.hypot(P.x,P.z+dz)<17.5)P.z+=dz;
+  if($('#play').checked){t01=(t01+dt/60)%1;applyTime()}
+  plaza.update(dt);camera.position.set(P.x,1.7,P.z);camera.rotation.set(P.pitch,P.yaw,0,'YXZ');renderer.render(scene,camera);
+  acc+=dt;frames++;if(acc>=.5){fps=Math.round(frames/acc);acc=0;frames=0;const st=plaza.getStats();$('#stats').textContent=`FPS ${fps}\n삼각형 ${st.triangles}\n그리기 호출 ${st.drawCalls}\n입자 ${st.particles} · ${st.quality}`}
+  requestAnimationFrame(frame)}
+requestAnimationFrame(frame);
+window.__demo={plaza,scene,camera,renderer,P,setT:v=>{t01=v;applyTime()},THREE};
+</script></body></html>
