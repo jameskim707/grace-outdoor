@@ -242,7 +242,7 @@ export default function createPlazaModule(opts={}){
     let target=0,dist=99;if(env&&env.player){const ox=host?.offset?.x||0,oz=host?.offset?.z||0,dx=env.player.x-ox-v.nx,dz=env.player.z-oz-v.nz;dist=Math.hypot(dx,dz);
       if(dist<12){let d=Math.atan2(dx,dz)-v.face;while(d>Math.PI)d-=TAU;while(d<-Math.PI)d+=TAU;target=clamp(d,-1.0,1.0)}}   // 손님 쪽으로 몸을 돌린다(최대 약 57°)
     v.look+=(target-v.look)*Math.min(1,dt*3);
-    if(dist<7&&v.t-v.lastWave>12){v.waveT=0;v.lastWave=v.t}
+    if(dist<7&&v.t-v.lastWave>12){v.waveT=0;v.lastWave=v.t;try{host&&host.onVendorGreet&&host.onVendorGreet({x:v.nx,z:v.nz,text:'안녕하세요!'})}catch(e){}}   // 손을 흔들 때 호스트에게 '인사했다'고 알린다(말풍선·목소리는 호스트가 맡음)
     let w=0;if(v.waveT!==null){v.waveT+=dt;const k=Math.min(1,v.waveT/1.8);w=Math.sin(k*Math.PI);if(v.waveT>1.8)v.waveT=null}
     const psi=v.face+Math.PI+v.look,c=Math.cos(psi),sn=Math.sin(psi),parts=npcParts(v.t,w,Math.sin(v.t*1.6)*.006);let i=0;
     for(const p of parts){v.E.set(p.rx||0,psi,p.rz||0,'YXZ');v.Q.setFromEuler(v.E);v.V.set(v.nx+p.x*c+p.z*sn,p.y,v.nz-p.x*sn+p.z*c);v.S.set(p.w,p.h,p.d);v.M.compose(v.V,v.Q,v.S);v.mesh.setMatrixAt(i,v.M);v.mesh.setColorAt(i,v.C.set(p.color));i++}
