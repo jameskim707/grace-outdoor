@@ -1,6 +1,6 @@
 // 중앙 분수광장 모듈 (인터페이스 v0.2)  ·  Three.js 는 host.THREE 로 받는다(직접 import 하지 않음)
 // 로컬 원점 = 분수 중심. 단위 1 = 1m, y 위, 오른손 좌표. 배치 위치는 통합 담당이 host.offset 으로 정한다.
-export const MODULE_INFO={id:'plaza',name:'중앙 분수광장',version:'0.1.0',interface:'0.2',threeTested:'0.186.1'};
+export const MODULE_INFO={id:'plaza',name:'중앙 분수광장',version:'0.2.0',interface:'0.2',threeTested:'0.186.1'};
 
 const TAU=Math.PI*2;
 const clamp=(v,a,b)=>Math.min(b,Math.max(a,v));
@@ -37,8 +37,26 @@ export function collides(shapes,x,z,r=0.3){
 function mergeGeos(T,list){const gs=list.map(g=>g.index?g.toNonIndexed():g),out=new T.BufferGeometry();
   for(const k of['position','normal','uv']){let total=0;for(const g of gs)total+=g.attributes[k].array.length;const arr=new Float32Array(total);let o=0;for(const g of gs){arr.set(g.attributes[k].array,o);o+=g.attributes[k].array.length}out.setAttribute(k,new T.BufferAttribute(arr,gs[0].attributes[k].itemSize))}return out}
 
+
+// 솜사탕·사탕 가게 주인의 몸 부품 (교회 캐릭터와 같은 상자 비율). wave 0~1 = 손 흔드는 정도
+function npcParts(t,wave,br){const o=[],S='#e6c3a3',HA='#b9b5ae',SH='#f6efe2',AP='#f3a9c4',PA='#5d6f8f',CAP='#7fb4e8',SO='#3a322b';
+ const P=(x,y,z,w,h,d,c,rx=0,rz=0)=>o.push({x,y,z,w,h,d,color:c,rx,rz});
+ P(-.09,.45,0,.13,.9,.15,PA);P(.09,.45,0,.13,.9,.15,PA);P(-.09,.045,-.04,.13,.09,.27,SO);P(.09,.045,-.04,.13,.09,.27,SO);   // 다리·신발
+ P(0,1.12,0,.42,.58,.25,SH);P(0,1.36+br,0,.5,.1,.27,SH);P(0,.98,-.14,.38,.72,.03,AP);P(0,1.33+br,-.14,.22,.2,.03,AP);        // 몸통·앞치마
+ P(0,1.5+br,0,.1,.1,.1,S);P(0,1.62+br,0,.2,.2,.21,S);                                                                         // 목·머리
+ P(0,1.72+br,.01,.22,.06,.23,HA);P(-.105,1.64+br,.03,.02,.14,.18,HA);P(.105,1.64+br,.03,.02,.14,.18,HA);P(0,1.64+br,.115,.2,.18,.02,HA);   // 흰머리
+ P(0,1.77+br,-.01,.24,.07,.26,CAP);P(0,1.745+br,-.15,.2,.025,.1,CAP);                                                       // 모자
+ P(-.05,1.63+br,-.108,.036,.036,.01,'#2b2118');P(.05,1.63+br,-.108,.036,.036,.01,'#2b2118');                                   // 눈
+ P(-.05,1.665+br,-.108,.05,.012,.01,HA);P(.05,1.665+br,-.108,.05,.012,.01,HA);                                                 // 눈썹
+ P(-.085,1.585+br,-.108,.04,.025,.01,'#f0a8a0');P(.085,1.585+br,-.108,.04,.025,.01,'#f0a8a0');P(0,1.6+br,-.112,.025,.03,.02,'#d9a98a');   // 볼·코
+ P(0,1.555+br,-.108,.08,.016,.01,'#9a4f49');P(-.045,1.565+br,-.108,.016,.016,.01,'#9a4f49');P(.045,1.565+br,-.108,.016,.016,.01,'#9a4f49');   // 웃는 입
+ P(-.27,1.17+br,0,.09,.5,.11,SH);P(-.27,.9+br,0,.075,.08,.1,S);                                                                 // 왼팔(내려뜨림)
+ const a=.18+(2.25+.4*Math.sin(t*11)-.18)*wave,sx=.27,sy=1.36+br,L=.5,dx=Math.sin(a),dy=-Math.cos(a);                           // 오른팔(어깨를 축으로 들어 올려 흔듦)
+ P(sx+dx*L/2,sy+dy*L/2,0,.09,L,.11,SH,0,a);P(sx+dx*(L+.04),sy+dy*(L+.04),0,.075,.08,.1,S);
+ return o}
+
 export default function createPlazaModule(opts={}){
-  const cfg=Object.assign({radius:16,plazaR:10.2,basinR:3.4,pathW:3.4,seed:186,
+  const cfg=Object.assign({radius:16,plazaR:10.2,basinR:3.4,pathW:3.4,seed:186,vendor:true,vendorDeg:315,vendorR:6.0,vendorLabel:'솜사탕 · 사탕',
     labels:{to_church:'예배당',to_garden:'치유의 정원',to_music:'별빛 음악당',to_library:'성경 도서관'}},opts);
   const QUALITY={low:{particles:150,flowers:16,ripples:3},mid:{particles:320,flowers:32,ripples:5},high:{particles:480,flowers:52,ripples:6}};
   let T=null,root=null,host=null,qual='mid',active=true,disposed=false,time=0;
@@ -188,6 +206,47 @@ export default function createPlazaModule(opts={}){
       shapes.push({type:'circle',x,z,r:.3})}
     posts.instanceMatrix.needsUpdate=true;
   }
+
+  function buildVendor(){
+    const ang=cfg.vendorDeg*Math.PI/180,R=cfg.vendorR,sx=Math.cos(ang)*R,sz=Math.sin(ang)*R,phi=Math.atan2(-sx,-sz),cph=Math.cos(phi),sph=Math.sin(phi);   // 가게의 앞(+z)이 분수를 향하게
+    const W=(lx,lz)=>({x:sx+lx*cph+lz*sph,z:sz-lx*sph+lz*cph});
+    const base=new T.Matrix4().makeTranslation(sx,0,sz).multiply(new T.Matrix4().makeRotationY(phi)),M=new T.Matrix4(),Q=new T.Quaternion(),E=new T.Euler(),V=new T.Vector3(),Sc=new T.Vector3();
+    const put=(mesh,i,lx,ly,lz,w,h,d,color,rx=0)=>{E.set(rx,0,0,'YXZ');Q.setFromEuler(E);V.set(lx,ly,lz);Sc.set(w,h,d);M.compose(V,Q,Sc);M.premultiply(base);mesh.setMatrixAt(i,M);mesh.setColorAt(i,new T.Color(color))};
+    const boxes=[],add=(...a)=>boxes.push(a);
+    add(0,.45,.1,2.2,.9,.9,'#8a6240');add(0,.93,.1,2.4,.06,1.04,'#f1e7d0');add(0,.62,.56,2.2,.12,.02,'#f3a9c4');add(0,1.0,-1.15,2.3,2.0,.08,'#f1dfc4');add(0,.45,-1.2,2.3,.14,.02,'#f3a9c4');add(0,1.55,-1.2,2.3,.1,.02,'#f3a9c4');       // 진열대, 상판, 앞띠, 뒷판
+    for(const x of[-1.12,1.12]){add(x,1.4,.55,.08,2.8,.08,'#6a4326');add(x,1.1,-1.15,.08,2.2,.08,'#6a4326')}                                                // 기둥
+    for(let i=0;i<8;i++)add(-1.12+i*.32,2.18,-.25,.32,.05,1.8,i%2?'#fff7ec':'#f3a9c4',.1);for(let i=0;i<8;i++)add(-1.12+i*.32,1.97,.66,.32,.14,.03,i%2?'#fff7ec':'#f3a9c4');                                                                  // 줄무늬 천막
+    add(.8,1.0,.2,.7,.1,.3,'#6a4326');                                                                                                                       // 솜사탕 꽂이대
+    const jars=[-1.05,-.82,-.59],cand=['#f2a7c3','#f6d56b','#9fd3f0','#b9e3b0','#d9b6f0','#ffb27a'],rr=rng(cfg.seed+9);
+    for(const jx of jars){add(jx,1.1,.28,.24,.34,.24,'#f2fbff');for(let k=0;k<5;k++)add(jx+(rr()-.5)*.16,1.285,.28+(rr()-.5)*.16,.06,.06,.06,cand[Math.floor(rr()*cand.length)])}   // 사탕 병과 쏟아진 사탕
+    const puffX=[.65,.95],stick=[];for(const x of puffX){add(x,1.15,.2,.03,.3,.03,'#e8d6b0')}
+    const geo=own('geo',new T.BoxGeometry(1,1,1)),mat=own('mat',lam('#ffffff',{emissive:'#45403a'})),parts=new T.InstancedMesh(geo,mat,boxes.length);root.add(parts);boxes.forEach((b,i)=>put(parts,i,...b));parts.instanceMatrix.needsUpdate=true;parts.instanceColor.needsUpdate=true;
+    // 솜사탕 덩어리
+    const pg=own('geo',new T.IcosahedronGeometry(1,1)),pm=own('mat',lam('#ffffff',{emissive:'#45403a'})),puffs=new T.InstancedMesh(pg,pm,puffX.length*2),pc=['#f7a8c8','#bfe0f7','#d9c4f0','#ffdbe9','#c9f0dc','#f7a8c8','#bfe0f7','#ffdbe9'];let pi=0;
+    puffX.forEach((x,i)=>{for(const[dy,r]of[[0,.12],[.09,.09]]){V.set(x,1.32+dy,.2);Q.identity();Sc.set(r,r*.92,r);M.compose(V,Q,Sc);M.premultiply(base);puffs.setMatrixAt(pi,M);puffs.setColorAt(pi,new T.Color(pc[(i*2+(dy?1:0))%pc.length]));pi++}});
+    puffs.instanceMatrix.needsUpdate=true;puffs.instanceColor.needsUpdate=true;root.add(puffs);
+    // 간판 + 처마 전구 (밤에 켜진다)
+    const t=tex(signCanvas(cfg.vendorLabel)),sm=own('mat',lam('#ffffff',{map:t})),sg=own('geo',new T.PlaneGeometry(1.7,.5));if(!t)sm.color.set('#6a4326');
+    const sign=new T.Mesh(sg,sm);sign.applyMatrix4(new T.Matrix4().multiplyMatrices(base,new T.Matrix4().makeTranslation(0,2.55,.66)));root.add(sign);
+    const sign2=new T.Mesh(sg,sm);sign2.applyMatrix4(new T.Matrix4().multiplyMatrices(base,new T.Matrix4().multiplyMatrices(new T.Matrix4().makeTranslation(0,1.2,-1.22),new T.Matrix4().makeRotationY(Math.PI))));root.add(sign2);   // 뒷면 간판
+    const bm=own('mat',new T.MeshBasicMaterial({color:'#e9e2c8'})),bg=own('geo',new T.BoxGeometry(.07,.07,.07)),bulbs=new T.InstancedMesh(bg,bm,9);
+    for(let i=0;i<9;i++){V.set(-1.12+i*.28,1.88,.72);Q.identity();Sc.set(1,1,1);M.compose(V,Q,Sc);M.premultiply(base);bulbs.setMatrixAt(i,M)}bulbs.instanceMatrix.needsUpdate=true;root.add(bulbs);refs.bulbM=bm;
+    // 주인(한 번에 그림)
+    const npc=new T.InstancedMesh(own('geo',new T.BoxGeometry(1,1,1)),own('mat',lam('#ffffff',{emissive:'#45403a'})),64);npc.instanceColor=new T.InstancedBufferAttribute(new Float32Array(64*3),3);npc.frustumCulled=false;npc.count=0;root.add(npc);
+    const np=W(-.15,-.62);refs.vendor={mesh:npc,nx:np.x,nz:np.z,face:phi,t:0,look:0,waveT:null,lastWave:-99,M:new T.Matrix4(),Q:new T.Quaternion(),E:new T.Euler(),V:new T.Vector3(),S:new T.Vector3(),C:new T.Color()};
+    const fp=W(-.1,.5),poolG2=own('geo',new T.CircleGeometry(2.3,24)),pool2=new T.Mesh(poolG2,refs.poolM);pool2.rotation.x=-Math.PI/2;pool2.position.set(fp.x,.045,fp.z);pool2.frustumCulled=false;root.add(pool2);
+    const c=W(0,-.225);shapes.push({type:'rect',x:c.x,z:c.z,w:2.6,d:1.95,rot:phi});
+    anchors.vendor={x:np.x,z:np.z,yaw:phi,kind:'vendor'};const f=W(0,1.55);anchors.vendor_front={x:f.x,z:f.z,yaw:phi,kind:'vendor_front'};
+    updateVendor(0,null)}
+  function updateVendor(dt,env){const v=refs.vendor;if(!v)return;v.t+=dt;
+    let target=0,dist=99;if(env&&env.player){const ox=host?.offset?.x||0,oz=host?.offset?.z||0,dx=env.player.x-ox-v.nx,dz=env.player.z-oz-v.nz;dist=Math.hypot(dx,dz);
+      if(dist<12){let d=Math.atan2(dx,dz)-v.face;while(d>Math.PI)d-=TAU;while(d<-Math.PI)d+=TAU;target=clamp(d,-1.0,1.0)}}   // 손님 쪽으로 몸을 돌린다(최대 약 57°)
+    v.look+=(target-v.look)*Math.min(1,dt*3);
+    if(dist<7&&v.t-v.lastWave>12){v.waveT=0;v.lastWave=v.t}
+    let w=0;if(v.waveT!==null){v.waveT+=dt;const k=Math.min(1,v.waveT/1.8);w=Math.sin(k*Math.PI);if(v.waveT>1.8)v.waveT=null}
+    const psi=v.face+Math.PI+v.look,c=Math.cos(psi),sn=Math.sin(psi),parts=npcParts(v.t,w,Math.sin(v.t*1.6)*.006);let i=0;
+    for(const p of parts){v.E.set(p.rx||0,psi,p.rz||0,'YXZ');v.Q.setFromEuler(v.E);v.V.set(v.nx+p.x*c+p.z*sn,p.y,v.nz-p.x*sn+p.z*c);v.S.set(p.w,p.h,p.d);v.M.compose(v.V,v.Q,v.S);v.mesh.setMatrixAt(i,v.M);v.mesh.setColorAt(i,v.C.set(p.color));i++}
+    v.mesh.count=i;v.mesh.instanceMatrix.needsUpdate=true;v.mesh.instanceColor.needsUpdate=true}
   function buildAnchors(){
     for(const[k,d]of Object.entries(AX))anchors[k]={x:d.x*cfg.radius,z:d.z*cfg.radius,dirX:d.x,dirZ:d.z,width:cfg.pathW,kind:'path'};
     anchors.plaza_ring={x:0,z:cfg.plazaR*.62,kind:'spot'};
@@ -203,12 +262,12 @@ export default function createPlazaModule(opts={}){
       qual=QUALITY[host.quality]?host.quality:'mid';
       root=new T.Group();root.name='plaza';
       if(host.offset)root.position.set(host.offset.x||0,0,host.offset.z||0);
-      buildGround();buildFountain();buildJets();buildRipples();buildBenches();buildBeds();buildLamps();buildSigns();buildAnchors();
+      buildGround();buildFountain();buildJets();buildRipples();buildBenches();buildBeds();buildLamps();buildSigns();buildAnchors();if(cfg.vendor)buildVendor();
       (host.root||host.scene)?.add(root);
       mod.setTimeOfDay(host.t01??0.5);
       return root},
-    update(dt){
-      if(disposed||!active||!root)return;time+=dt;
+    update(dt,env){
+      if(disposed||!active||!root)return;time+=dt;updateVendor(dt,env);
       const {jets,g}=refs,pos=refs.pts.geometry.attributes.position.array,rate=.28;
       for(let i=0;i<refs.pn;i++){const j=jets[refs.pj[i]],u=(refs.pp[i]+time*rate)%1,t=u*j.T;
         pos[i*3]=j.ox+(j.vx+refs.px[i]*j.spread*3)*t;pos[i*3+1]=j.oy+j.vy*t-.5*g*t*t;pos[i*3+2]=j.oz+(j.vz+refs.pz[i]*j.spread*3)*t}
@@ -219,7 +278,7 @@ export default function createPlazaModule(opts={}){
     setTimeOfDay(t01){const E=envFor(t01),n=E.night,wc=mixHex('#63aee0','#27528f',n);
       refs.water.color.set(wc);refs.water1.color.set(wc);refs.water2.color.set(wc);
       refs.glow.opacity=n*.55;refs.ptsMat.color.set(mixHex('#f2fbff','#cfe6ff',n));
-      refs.headM.color.set(mixHex('#d9d0b8','#ffe3a0',E.lamps));refs.coneBase=E.lamps*.2;refs.coneM.opacity=refs.coneBase;refs.poolM.opacity=E.lamps*.42;
+      refs.headM.color.set(mixHex('#d9d0b8','#ffe3a0',E.lamps));if(refs.bulbM)refs.bulbM.color.set(mixHex('#e9e2c8','#ffd27a',E.lamps));refs.coneBase=E.lamps*.2;refs.coneM.opacity=refs.coneBase;refs.poolM.opacity=E.lamps*.42;
       return E},
     setLightingState(timeOfDay){const map={day:.5,sunset:.75,night:0};mod.setTimeOfDay(map[timeOfDay]??.5)},     // 라이라 초안 호환
     setQuality(q){if(!QUALITY[q]||!root)return;qual=q;assignParticles(QUALITY[q].particles);refs.rn=QUALITY[q].ripples;setFlowerCount()},
